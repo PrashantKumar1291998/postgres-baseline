@@ -51,7 +51,7 @@ No means can access your postgresql when we implement it as per CIS Benchmark.
 To check your postgresl it requires following attributes.
 
 |**Paramter Name**| **Type** | **Description** | **Default Value** |
-|-----------------|----------|-----------------|
+|-----------------|----------|-----------------|-------------------|
 | user | *mandatory* | Your database user, this tool execute some query in postgresql for which we will be needing any database user | postgres | 
 | password | *mandatory* |  Your database password, this tool execute some query in postgresql for which we will be needing password of given database user |  No   |
 | host | *mandatory* | host is ip address or dns name where postgresql is listening | localhost |
