@@ -40,3 +40,58 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
+
+## Purpose 
+Database are key component and main target of any attacker. Database stored information should be exposed by any means.
+The aim of this tool is to check postgresl  being used is configured as per CIS Benchmark Standards.
+No means can access your postgresql when we implement it as per CIS Benchmark.
+
+## Attributes
+
+To check your postgresl it requires following attributes.
+
+|**Paramter Name**| **Type** | **Description** | **Default Value** |
+|-----------------|----------|-----------------|
+| user | *mandatory* | Your database user, this tool execute some query in postgresql for which we will be needing any database user | postgres | 
+| password | *mandatory* |  Your database password, this tool execute some query in postgresql for which we will be needing password of given database user |  No   |
+| host | *mandatory* | host is ip address or dns name where postgresql is listening | localhost |
+| postgres_conf_dir | *mandatory* | Postgresql configuration Directory | /var/lib/postgresql/12/main |
+| postgres_conf_path | *mandatory* | In which format you want result Available options are HTML,XML,CSV etc. | /etc/postgresql/12/main |
+| postgres_hba_conf_file | *manadatory* | Name of the slack channel in which notification should be sent | /etc/postgresql/12/main  |
+
+## How to pass attributes
+
+Their are two ways to pass attributes
+
+### inspec.yml
+
+In inspec.yml 
+
+```
+attributes:
+  - name: postgres_data
+    value: "/var/lib/postgres/10"
+  - name: postgres_conf_dir
+    value: "/etc/postgresql"
+  - name: postgres_conf_path
+    value: "/etc/postgresql/10/main/postgresql.conf"
+  - name: postgres_hba_conf_file
+    value: "/etc/postgresql/10/main/pg_hba.conf"
+  - name: "user"
+    value: "postgres"
+  - name: password
+    value: "root"
+  - name: "host"
+    value: "127.0.0.1"
+
+```
+Replace this attributes with your own
+
+### CLI
+
+Execute inspec in following ways
+
+```
+inspec exec postgres-baseline --input user=postgres password=root host=172.1.1.1 
+
+```

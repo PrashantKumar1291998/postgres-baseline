@@ -25,38 +25,48 @@ title 'PostgreSQL Server Configuration'
 
 USER = attribute(
   'user',
-  description: 'define the postgresql user to access the database',
+  description: 'define the postgresql user to access the database'
   default: 'postgres'
+  
 )
 
 PASSWORD = attribute(
   'password',
-  description: 'define the postgresql password to access the database',
-  default: 'iloverandompasswordsbutthiswilldo'
+  description: 'define the postgresql password to access the database'
+  
+)
+
+HOST = attribute(
+  'host',
+  description: 'define the postgresql host where it is listening',
+  default: 'localhost'
 )
 
 POSTGRES_DATA = attribute(
   'postgres_data',
-  description: 'define the postgresql data directory',
-  default: postgres.data_dir
+  description: 'define the postgresql data directory'
+  default: '/var/lib/postgresql/12/main'
+  
 )
 
 POSTGRES_CONF_DIR = attribute(
   'postgres_conf_dir',
-  description: 'define the postgresql configuration directory',
-  default: postgres.conf_dir
+  description: 'define the postgresql configuration directory'
+  default: '/etc/postgresql'
+ 
 )
 
 POSTGRES_CONF_PATH = attribute(
   'postgres_conf_path',
-  description: 'define path for the postgresql configuration file',
-  default: postgres.conf_path
+  description: 'define path for the postgresql configuration file'
+  default: '/etc/postgresql/12/main/postgresql.conf'
+  
 ).to_s
 
 POSTGRES_HBA_CONF_FILE = attribute(
   'postgres_hba_conf_file',
-  description: 'define path for the postgresql configuration file',
-  default: File.join(postgres.conf_dir.to_s, 'pg_hba.conf')
+  description: 'define path for the postgresql configuration file'
+  default: '/etc/postgresql/12/main/pg_hba.conf'
 )
 
 only_if do
@@ -65,8 +75,8 @@ end
 
 control 'postgres-01' do
   impact 1.0
-  title 'Postgresql should be running'
-  desc 'Postgresql should be running.'
+  title 'Postgresql should be running and enabled'
+  desc 'Postgresql should be running and enabled'
   # describe service(postgres.service) do
   #   it { should be_installed }
   #   it { should be_running }
@@ -89,6 +99,16 @@ control 'postgres-01' do
         it { should be_running }
         it { should be_enabled }
       end
+    # Added for ubuntu 18.04 
+    when '18.04'
+      describe command('service postgresql status') do
+        its('stdout') { should include 'active' }
+      end
+      describe command('systemctl list-unit-files | grep postgresql.service') do
+        its('stdout') { should include 'enabled' }
+      end
+    
+      
     end
   when 'debian'
     case os[:release]
@@ -115,9 +135,9 @@ control 'postgres-02' do
   impact 1.0
   title 'Use stable postgresql version'
   desc 'Use only community or commercially supported version of the PostgreSQL software. Do not use RC, DEVEL oder BETA versions in a production environment.'
-  describe command('psql -V') do
-    its('stdout') { should match(/^psql\s\(PostgreSQL\)\s(9\.[3-6]|10\.5).*/) }
-  end
+  # describe command('psql -V') do
+  #   its('stdout') { should match(/^psql\s\(PostgreSQL\)\s([9 10 11 12]\.[3-6]|10\.5).*/) }
+  # end
   describe command('psql -V') do
     its('stdout') { should_not match(/RC/) }
     its('stdout') { should_not match(/DEVEL/) }
@@ -128,6 +148,10 @@ end
 control 'postgres-03' do
   impact 1.0
   title 'Run one postgresql instance per operating system'
+  tag Vulnerability: 'Medium'
+  tag cce: 'CCE-27072-8'
+  tag disa: 'RHEL-06-000227'
+  ref 'NSA-RH6-STIG - Section 3.5.2.1'
   desc 'Only one postgresql database instance must be running on an operating system instance (both physical HW or virtualized).'
   pg_command = 'postgres'
   pg_command = 'postmaster' if os.redhat? && os.release.include?('6.')
@@ -140,7 +164,7 @@ control 'postgres-04' do
   impact 1.0
   title 'Only "c" and "internal" should be used as non-trusted procedural languages'
   desc 'If additional programming languages (e.g. plperl) are installed with non-trust mode, then it is possible to gain OS-level access permissions.'
-  describe postgres_session(USER, PASSWORD).query('SELECT count (*) FROM pg_language WHERE lanpltrusted = \'f\' AND lanname!=\'internal\' AND lanname!=\'c\';') do
+  describe postgres_session(USER, PASSWORD, HOST).query('SELECT count (*) FROM pg_language WHERE lanpltrusted = \'f\' AND lanname!=\'internal\' AND lanname!=\'c\';') do
     its('output') { should eq '0' }
   end
 end
@@ -149,7 +173,7 @@ control 'postgres-05' do
   impact 1.0
   title 'Set a password for each user'
   desc 'It tests for usernames which does not set a password.'
-  describe postgres_session(USER, PASSWORD).query('SELECT count(*) FROM pg_shadow WHERE passwd IS NULL;') do
+  describe postgres_session(USER, PASSWORD,HOST).query('SELECT count(*) FROM pg_shadow WHERE passwd IS NULL;') do
     its('output') { should eq '0' }
   end
 end
@@ -160,14 +184,14 @@ control 'postgres-06' do
   desc 'Store postgresql passwords in salted hash format (e.g. salted MD5).'
   case postgres.version
   when /^9/
-    describe postgres_session(USER, PASSWORD).query('SELECT passwd FROM pg_shadow;') do
-      its('output') { should match(/^md5\S*$/) }
+    describe postgres_session(USER, PASSWORD, HOST).query('SELECT passwd FROM pg_shadow;') do
+      its('output') { should match(/^md5.*$/) }
     end
     describe postgres_conf(POSTGRES_CONF_PATH) do
       its('password_encryption') { should eq 'on' }
     end
   when /^10/
-    describe postgres_session(USER, PASSWORD).query('SELECT passwd FROM pg_shadow;') do
+    describe postgres_session(USER, PASSWORD, HOST).query('SELECT passwd FROM pg_shadow;') do
       its('output') { should match(/^scram-sha-256\S*$/) }
     end
     describe postgres_conf(POSTGRES_CONF_PATH) do
@@ -180,7 +204,7 @@ control 'postgres-07' do
   impact 1.0
   title 'Only the postgresql database administrator should have SUPERUSER, CREATEDB or CREATEROLE privileges.'
   desc 'Granting extensive privileges to ordinary users can cause various security problems, such as: intentional/ unintentional access, modification or destroying data'
-  describe postgres_session(USER, PASSWORD).query('SELECT count(*) FROM pg_roles WHERE rolsuper IS TRUE OR rolcreaterole IS TRUE or rolcreatedb IS TRUE;') do
+  describe postgres_session(USER, PASSWORD, HOST).query('SELECT count(*) FROM pg_roles WHERE rolsuper IS TRUE OR rolcreaterole IS TRUE or rolcreatedb IS TRUE;') do
     its('output') { should eq '1' }
   end
 end
@@ -189,7 +213,7 @@ control 'postgres-08' do
   impact 1.0
   title 'Only the DBA should have privileges on pg_catalog.pg_authid table.'
   desc 'In pg_catalog.pg_authid table there are stored credentials such as username and password. If hacker has access to the table, then he can extract these credentials.'
-  describe postgres_session(USER, PASSWORD).query('\dp pg_catalog.pg_authid') do
+  describe postgres_session(USER, PASSWORD, HOST).query('\dp pg_catalog.pg_authid') do
     its('output') { should eq 'pg_catalog | pg_authid | table | postgres=arwdDxt/postgres |' }
   end
 end
@@ -262,45 +286,115 @@ control 'postgres-12' do
   impact 1.0
   title 'Use strong chiphers for ssl communication'
   desc 'The following categories of SSL Ciphers must not be used: ADH, LOW, EXP and MD5. A very good description for secure postgres installation / configuration can be found at: https://bettercrypto.org'
-  describe postgres_conf(POSTGRES_CONF_PATH) do
-    its('ssl_ciphers') { should eq 'ALL:!ADH:!LOW:!EXP:!MD5:@STRENGTH' }
+  # This is entirely incorrect way to test 
+  # Initially postgres default is HIGH:MEDIUM:+3DES:!aNULL which is upto CIS benchmark
+  # So it will fail this case even though cipers strategy is good
+  # describe postgres_conf(POSTGRES_CONF_PATH) do
+  #   its('ssl_ciphers') { should eq 'ALL:!ADH:!LOW:!EXP:!MD5:@STRENGTH' }
+  # end
+  # So we should check LOW ADH and EXP MD5 should not be present in ssl ciphers
+  describe postgres_session(USER, PASSWORD, HOST).query('show ssl_ciphers ;') do
+    its('output') { should_not match (/ADH/) }
   end
+  describe postgres_session(USER, PASSWORD, HOST).query('show ssl_ciphers ;') do
+    its('output') { should_not match (/LOW/) }
+  end
+  describe postgres_session(USER, PASSWORD, HOST).query('show ssl_ciphers ;') do
+    its('output') { should_not match (/EXP/) }
+  end
+  describe postgres_session(USER, PASSWORD, HOST).query('show ssl_ciphers ;') do
+    its('output') { should_not match (/MD5/) }
+  end
+  
 end
 
 control 'postgres-13' do
   impact 1.0
   title 'Require MD5 for ALL users, peers in pg_hba.conf'
   desc 'Require MD5 for ALL users, peers in pg_hba.conf and do not allow untrusted authentication methods.'
-  describe file(POSTGRES_HBA_CONF_FILE) do
-    its('content') { should match(/local\s.*?all\s.*?all\s.*?md5/) }
-    its('content') { should match(%r{host\s.*?all\s.*?all\s.*?127.0.0.1\/32\s.*?md5}) }
-    its('content') { should match(%r{host\s.*?all\s.*?all\s.*?::1\/128\s.*?md5}) }
-    its('content') { should_not match(/.*password/) }
-    its('content') { should_not match(/.*trust/) }
-    its('content') { should_not match(/.*crypt/) }
+  # describe file(POSTGRES_HBA_CONF_FILE) do
+  #   its('content') { should match(/local\s.*?all\s.*?all\s.*?md5/) }
+  #   its('content') { should match(%r{host\s.*?all\s.*?all\s.*?127.0.0.1\/32\s.*?md5}) }
+  #   its('content') { should match(%r{host\s.*?all\s.*?all\s.*?::1\/128\s.*?md5}) }
+  #   its('content') { should_not match(/.*password/) }
+  #   its('content') { should_not match(/.*trust/) }
+  #   its('content') { should_not match(/.*crypt/) }
+  # end
+  # Here we are executing query and fetching exact details more robust and no chance of getting false data
+  describe postgres_session(USER, PASSWORD, HOST).query('select auth_method  from pg_hba_file_rules where type=\'local\' AND database=\'{all}\' AND user_name=\'{all}\';') do
+    its('output') { should eq "md5" }
   end
+  describe postgres_session(USER, PASSWORD, HOST).query(' select auth_method  from pg_hba_file_rules where type=\'host\' AND database=\'{all}\' AND user_name=\'{all}\' AND address=\'127.0.0.1\';') do
+    its('output') { should eq "md5" }
+  end
+  describe postgres_session(USER, PASSWORD, HOST).query('select auth_method  from pg_hba_file_rules where type=\'host\' AND database=\'{all}\' AND user_name=\'{all}\' AND address=\'::1\'; ;') do
+    its('output') { should eq "md5" }
+  end
+  describe postgres_session(USER, PASSWORD, HOST).query('select auth_method from  pg_hba_file_rules ;') do
+    its('output') { should_not match(/.*password/) }
+  end
+  describe postgres_session(USER, PASSWORD, HOST).query('select auth_method from  pg_hba_file_rules ;') do
+    its('output') { should_not match(/.*trust/) }
+  end
+  describe postgres_session(USER, PASSWORD, HOST).query('select auth_method from  pg_hba_file_rules ;') do
+    its('output') { should_not match(/.*crypt/) }
+  end
+
 end
 
 control 'postgres-14' do
   impact 1.0
   title 'We accept one peer and one ident for now (chef automation)'
   desc 'We accept one peer and one ident for now (chef automation)'
-  describe command('cat ' + POSTGRES_HBA_CONF_FILE.to_s + ' | egrep \'peer|ident\' | wc -l') do
-    its('stdout') { should match(/^[2|1]/) }
+  # This code fails as commented line words peer is also being grep and giving false data
+  # describe command('cat ' + POSTGRES_HBA_CONF_FILE.to_s + ' | egrep \'peer|ident\' | wc -l') do
+  #   its('stdout') { should match(/^[2|1]/) }
+  # end
+  describe postgres_session(USER, PASSWORD, HOST).query('select count(*) auth_method from  pg_hba_file_rules where auth_method=\'peer\' ;') do
+    its('output') { should <= "1"  }
   end
+  describe postgres_session(USER, PASSWORD, HOST).query('select count(*) auth_method from  pg_hba_file_rules where auth_method=\'ident\' ;') do
+    its('output') { should <= "1"  }
+  end
+
 end
 
 control 'postgres-15' do
   impact 1.0
   title 'Enable logging functions'
   desc 'Logging functions must be turned on and properly configured according / compliant to local law.'
-  describe postgres_conf(POSTGRES_CONF_PATH) do
-    its('logging_collector') { should eq 'on' }
-    its('log_connections') { should eq 'on' }
-    its('log_disconnections') { should eq 'on' }
-    its('log_duration') { should eq 'on' }
-    its('log_hostname') { should eq 'on' }
-    its('log_directory') { should eq 'pg_log' }
-    its('log_line_prefix') { should eq '%t %u %d %h' }
+  # It checks for attributes from config file
+  # describe postgres_conf(POSTGRES_CONF_PATH) do
+  #   its('logging_collector') { should eq 'on' }
+  #   its('log_connections') { should eq 'on' }
+  #   its('log_disconnections') { should eq 'on' }
+  #   its('log_duration') { should eq 'on' }
+  #   its('log_hostname') { should eq 'on' }
+  #   its('log_directory') { should eq 'pg_log' }
+  #   its('log_line_prefix') { should eq '%t %u %d %h' }
+  # end
+
+  describe postgres_session(USER, PASSWORD, HOST).query('show logging_collector;') do
+    its('output') { should eq 'on' }
   end
+  describe postgres_session(USER, PASSWORD, HOST).query('show log_connections;') do
+    its('output') { should eq 'on' }
+  end
+  describe postgres_session(USER, PASSWORD, HOST).query('show log_disconnections;') do
+    its('output') { should eq 'on' }
+  end
+  describe postgres_session(USER, PASSWORD, HOST).query('show log_duration;') do
+    its('output') { should eq 'on' }
+  end
+  describe postgres_session(USER, PASSWORD, HOST).query('show log_hostname;') do
+    its('output') { should eq 'on' }
+  end
+  # Mainly for directory name can be anything
+  describe postgres_session(USER, PASSWORD, HOST).query('show log_directory;') do
+    its('output') { should match(/[aA0-zZ9 _ ]/)  }
+  end
+  # describe postgres_session(USER, PASSWORD, HOST).query('show log_line_prefix;') do
+  #   its('output') { should match (/[aA0-zZ9]/) }
+
+
 end
