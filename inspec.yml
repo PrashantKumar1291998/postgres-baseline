@@ -9,4 +9,20 @@ summary: CIS Benchmark Postgres
 version: 2.0.7
 supports:
     - os-family: unix
-
+# attributes:
+#   - name: postgres_data
+#     value: "/var/lib/postgres/10"
+#   - name: postgres_conf_dir
+#     value: "/etc/postgresql"
+#   - name: postgres_conf_path
+#     value: "/etc/postgresql/10/main/postgresql.conf"
+#   - name: postgres_hba_conf_file
+#     value: "/etc/postgresql/10/main/pg_hba.conf"
+#   - name: "user"
+#     value: "postgres"
+#   - name: password
+#     value: "root"
+#   - name: "host"
+#     value: "127.0.0.1"
+#   - name: "port" 
+#     value: "5432"
